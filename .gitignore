@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Build outputs
+/dist/
+/build/
+/out/
+/release/
+.vite/
+*.tsbuildinfo
+
+# Electron packaging artifacts
+*.exe
+*.dmg
+*.AppImage
+*.snap
+*.deb
+*.rpm
+*.msi
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local data & uploads
+data/uploads/*
+!data/uploads/.gitkeep
+
+data/backups/*
+!data/backups/.gitkeep
+
+data/db/*
+!data/db/.gitkeep
+
+# Temporary / cache
+.cache/
+coverage/
+*.pid
+
+# IDE/editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+cmd.zip

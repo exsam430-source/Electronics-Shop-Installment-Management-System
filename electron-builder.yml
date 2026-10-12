@@ -1,0 +1,28 @@
+appId: com.mrsolver.electronicsshopmanager
+productName: MR SOLVER Electronics Shop Manager
+directories:
+  output: release
+files:
+  - dist/**/*
+  - server/**/*
+  - main.js
+  - preload.js
+  - package.json
+  - data/**/*
+extraMetadata:
+  main: main.js
+asar: false
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: MR SOLVER Electronics Shop
