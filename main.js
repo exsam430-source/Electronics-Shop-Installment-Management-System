@@ -84,22 +84,23 @@ async function ensureDatabaseRunning(dataDir) {
   if (!fs.existsSync(dbPath)) fs.mkdirSync(dbPath, { recursive: true });
   if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
 
-  // Auto-recovery: clean stale lock file from unexpected power cuts
+  // Auto-recovery: clean stale lock file from unexpected power cuts or unclean shutdowns
   const lockFile = path.join(dbPath, 'mongod.lock');
   if (fs.existsSync(lockFile)) {
     try {
-      const stats = fs.statSync(lockFile);
-      if (stats.size > 0) {
-        console.log('[Electron] Recovering database lock from prior session...');
-        const { spawnSync } = require('child_process');
-        spawnSync(foundMongod, ['--repair', '--dbpath', dbPath], {
-          cwd: path.dirname(foundMongod),
-          windowsHide: true,
-          timeout: 10000
-        });
+      console.log('[Electron] Prior lock file detected. Running repair and clearing lock...');
+      const { spawnSync } = require('child_process');
+      spawnSync(foundMongod, ['--repair', '--dbpath', dbPath], {
+        cwd: path.dirname(foundMongod),
+        windowsHide: true,
+        timeout: 10000
+      });
+      if (fs.existsSync(lockFile)) {
+        try { fs.unlinkSync(lockFile); } catch (e) { fs.writeFileSync(lockFile, ''); }
       }
     } catch (e) {
       console.warn('[Electron] Lock recovery warning:', e.message);
+      try { fs.unlinkSync(lockFile); } catch (e2) {}
     }
   }
 

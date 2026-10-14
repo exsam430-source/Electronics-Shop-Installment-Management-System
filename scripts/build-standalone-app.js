@@ -117,27 +117,30 @@ echo Installing and configuring software for your PC...
 echo.
 
 set "SOURCE_DIR=%~dp0"
-set "INSTALL_DIR=C:\\MR-SOLVER-Electronics-Shop"
+set "INSTALL_DIR=%LOCALAPPDATA%\\Programs\\MR-SOLVER-Electronics-Shop"
 set "DESKTOP=%USERPROFILE%\\Desktop"
 set "START_MENU=%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\MR SOLVER"
 
-echo [1/4] Creating application directory at !INSTALL_DIR!...
-if not exist "!INSTALL_DIR!" mkdir "!INSTALL_DIR!"
-xcopy /E /I /Y /Q "!SOURCE_DIR!*" "!INSTALL_DIR!\\" >nul
+echo [1/4] Unblocking downloaded files...
+powershell -ExecutionPolicy Bypass -NoProfile -Command "Get-ChildItem -Path '%SOURCE_DIR%' -Recurse -ErrorAction SilentlyContinue | Unblock-File" >nul 2>&1
 
-echo [2/4] Creating Desktop Shortcut with shop logo...
-powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('!DESKTOP!\\MR SOLVER Electronics Shop.lnk'); $s.TargetPath = '!INSTALL_DIR!\\MR-SOLVER-Electronics-Shop.exe'; $s.WorkingDirectory = '!INSTALL_DIR!'; $s.IconLocation = '!INSTALL_DIR!\\icon.ico'; $s.Description = 'MR SOLVER Electronics Shop & Installment Management System'; $s.Save()"
+echo [2/4] Setting up application folder at !INSTALL_DIR!...
+if not exist "!INSTALL_DIR!" mkdir "!INSTALL_DIR!" >nul 2>&1
+xcopy /E /I /Y /Q "!SOURCE_DIR!*" "!INSTALL_DIR!\\" >nul 2>&1
 
-echo [3/4] Creating Start Menu Shortcut...
-if not exist "!START_MENU!" mkdir "!START_MENU!"
-powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('!START_MENU!\\MR SOLVER Electronics Shop.lnk'); $s.TargetPath = '!INSTALL_DIR!\\MR-SOLVER-Electronics-Shop.exe'; $s.WorkingDirectory = '!INSTALL_DIR!'; $s.IconLocation = '!INSTALL_DIR!\\icon.ico'; $s.Description = 'MR SOLVER Electronics Shop & Installment Management System'; $s.Save()"
+echo [3/4] Creating Desktop Shortcut...
+powershell -ExecutionPolicy Bypass -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('!DESKTOP!\\MR SOLVER Electronics Shop.lnk'); $s.TargetPath = '!INSTALL_DIR!\\MR-SOLVER-Electronics-Shop.exe'; $s.WorkingDirectory = '!INSTALL_DIR!'; $s.IconLocation = '!INSTALL_DIR!\\icon.ico'; $s.Description = 'MR SOLVER Electronics Shop & Installment Management System'; $s.Save()" >nul 2>&1
 
-echo [4/4] Installation Complete!
+echo [4/4] Creating Start Menu Shortcut...
+if not exist "!START_MENU!" mkdir "!START_MENU!" >nul 2>&1
+powershell -ExecutionPolicy Bypass -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('!START_MENU!\\MR SOLVER Electronics Shop.lnk'); $s.TargetPath = '!INSTALL_DIR!\\MR-SOLVER-Electronics-Shop.exe'; $s.WorkingDirectory = '!INSTALL_DIR!'; $s.IconLocation = '!INSTALL_DIR!\\icon.ico'; $s.Description = 'MR SOLVER Electronics Shop & Installment Management System'; $s.Save()" >nul 2>&1
+
 echo.
 echo =====================================================================
 echo   SETUP COMPLETED SUCCESSFULLY!
 echo.
 echo   - Desktop Shortcut created: "MR SOLVER Electronics Shop"
+echo   - Installed Path: !INSTALL_DIR!
 echo   - Default Admin Login:
 echo       Username: admin
 echo       Password: admin123
@@ -149,7 +152,7 @@ set /p RUN_NOW="Do you want to launch the software now? (Y/N): "
 if /i "!RUN_NOW!"=="Y" (
     start "" "!INSTALL_DIR!\\MR-SOLVER-Electronics-Shop.exe"
 )
-exit
+exit /b 0
 `;
   fs.writeFileSync(path.join(releaseDir, 'Setup-Installer.bat'), installerBat);
 
@@ -199,7 +202,14 @@ DATABASE & BACKUP:
 - To make a backup anytime, go to System Settings -> Backup & Restore -> "Backup Now".
 - Backups can be downloaded to your computer or restored with 1 click!
 `;
-  fs.writeFileSync(path.join(releaseDir, 'CLIENT-SETUP-INSTRUCTIONS.txt'), clientReadme);
+  // 5. Compile native Setup-Installer.exe
+  try {
+    const { execSync } = require('child_process');
+    console.log('[Build] Compiling native Setup-Installer.exe...');
+    execSync('node scripts/build-installer-exe.js', { stdio: 'inherit', cwd: rootDir });
+  } catch (err) {
+    console.warn('[Build Warning] Failed to compile native installer exe:', err.message);
+  }
 
   console.log('========================================================');
   console.log(' BUILD COMPLETED SUCCESSFULLY!');
