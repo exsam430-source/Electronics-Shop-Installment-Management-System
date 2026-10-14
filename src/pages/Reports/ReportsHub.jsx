@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import { useShop } from '../../context/ShopContext';
+import { generateReportHtml, printHtmlDocument, saveHtmlToPdf } from '../../services/printService';
 
 export default function ReportsHub() {
   const { profile } = useShop();
@@ -64,8 +65,44 @@ export default function ReportsHub() {
     fetchReport();
   }, [activeTab, selMonth, selYear]);
 
-  const handlePrint = () => {
-    window.print();
+  const getActiveReportMeta = () => {
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    let data = null;
+    if (activeTab === 'monthly') data = monthlyData;
+    else if (activeTab === 'sales') data = salesData;
+    else if (activeTab === 'collections') data = collectionData;
+    else if (activeTab === 'profit') data = profitData;
+    else if (activeTab === 'stock') data = stockData;
+
+    return {
+      data,
+      meta: {
+        monthName: monthNames[selMonth],
+        year: selYear,
+        startDate,
+        endDate
+      }
+    };
+  };
+
+  const handlePrint = async () => {
+    const { data, meta } = getActiveReportMeta();
+    if (!data) return;
+    const fullHtml = generateReportHtml(activeTab, data, profile, meta);
+    await printHtmlDocument(fullHtml, { pageSize: 'A4' });
+  };
+
+  const handleSavePdf = async () => {
+    const { data, meta } = getActiveReportMeta();
+    if (!data) return;
+    const fullHtml = generateReportHtml(activeTab, data, profile, meta);
+    await saveHtmlToPdf(fullHtml, {
+      filename: `Audit_Report_${activeTab.toUpperCase()}_${Date.now()}.pdf`,
+      pageSize: 'A4'
+    });
   };
 
   const currency = profile?.currency || 'Rs.';
@@ -81,13 +118,24 @@ export default function ReportsHub() {
           </p>
         </div>
 
-        <button
-          onClick={handlePrint}
-          className="flex items-center space-x-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold border border-slate-700 shadow-sm transition"
-        >
-          <Printer className="w-4 h-4 text-indigo-400" />
-          <span>Print Current Report</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={handleSavePdf}
+            className="flex items-center space-x-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded-xl text-xs font-semibold border border-cyan-500/30 shadow-sm transition hover:scale-[1.02]"
+            title="Download audit-ready report as PDF"
+          >
+            <Download className="w-4 h-4" />
+            <span>Save PDF</span>
+          </button>
+          <button
+            onClick={handlePrint}
+            className="flex items-center space-x-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-600/30 transition hover:scale-[1.02]"
+            title="Print current report"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Print Current Report</span>
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -111,20 +159,6 @@ export default function ReportsHub() {
             {tab.label}
           </button>
         ))}
-      </div>
-
-      {/* Printable Report Header */}
-      <div className="hidden print:block text-center border-b pb-4 mb-4 text-black">
-        <h2 className="text-xl font-bold uppercase">{profile?.shopName}</h2>
-        <p className="text-xs">{profile?.address} • Phone: {profile?.phone}</p>
-        <p className="text-sm font-semibold mt-2 underline uppercase">
-          {activeTab === 'monthly' && 'MONTHLY EXECUTIVE BUSINESS SUMMARY'}
-          {activeTab === 'sales' && 'SALES REPORT'}
-          {activeTab === 'collections' && 'COLLECTIONS REPORT'}
-          {activeTab === 'profit' && 'PROFIT ANALYSIS REPORT'}
-          {activeTab === 'stock' && 'INVENTORY & STOCK VALUATION REPORT'}
-        </p>
-        <p className="text-[10px] text-neutral-600 mt-1">Generated: {new Date().toLocaleString('en-GB')}</p>
       </div>
 
       {/* TAB 1: MONTHLY BUSINESS SUMMARY */}
@@ -218,10 +252,135 @@ export default function ReportsHub() {
               </p>
             </div>
           </div>
+
+          {/* Sales Tables Preview */}
+          {salesData.cashSales && salesData.cashSales.length > 0 && (
+            <div className="glass-panel overflow-hidden border-slate-800">
+              <div className="px-5 py-3 border-b border-slate-800 bg-slate-950/60 font-semibold text-xs text-white">
+                Cash Sales List ({salesData.cashSales.length} Invoices)
+              </div>
+              <div className="overflow-x-auto max-h-[320px]">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-950/80 text-slate-400 uppercase font-mono tracking-wider border-b border-slate-800 sticky top-0">
+                    <tr>
+                      <th className="py-2.5 px-4">Invoice #</th>
+                      <th className="py-2.5 px-4">Date</th>
+                      <th className="py-2.5 px-4">Customer</th>
+                      <th className="py-2.5 px-4 text-right">Total Amount</th>
+                      <th className="py-2.5 px-4 text-right">Profit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {salesData.cashSales.slice(0, 20).map((cs) => (
+                      <tr key={cs._id} className="hover:bg-slate-800/40">
+                        <td className="py-2.5 px-4 font-mono font-bold text-indigo-400">{cs.invoiceNumber}</td>
+                        <td className="py-2.5 px-4 text-slate-300">{new Date(cs.saleDate).toLocaleDateString('en-GB')}</td>
+                        <td className="py-2.5 px-4 text-white font-medium">{cs.customerId?.customerName || cs.customerName || 'Walk-in'}</td>
+                        <td className="py-2.5 px-4 text-right font-mono font-bold text-white">{currency} {cs.totalAmount?.toLocaleString()}</td>
+                        <td className="py-2.5 px-4 text-right font-mono font-bold text-emerald-400">{currency} {cs.profit?.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {salesData.installmentSales && salesData.installmentSales.length > 0 && (
+            <div className="glass-panel overflow-hidden border-slate-800">
+              <div className="px-5 py-3 border-b border-slate-800 bg-slate-950/60 font-semibold text-xs text-white">
+                Installment Sales List ({salesData.installmentSales.length} Contracts)
+              </div>
+              <div className="overflow-x-auto max-h-[320px]">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-950/80 text-slate-400 uppercase font-mono tracking-wider border-b border-slate-800 sticky top-0">
+                    <tr>
+                      <th className="py-2.5 px-4">Sale #</th>
+                      <th className="py-2.5 px-4">Date</th>
+                      <th className="py-2.5 px-4">Customer</th>
+                      <th className="py-2.5 px-4 text-center">Plan</th>
+                      <th className="py-2.5 px-4 text-right">Total Amount</th>
+                      <th className="py-2.5 px-4 text-right">Advance Paid</th>
+                      <th className="py-2.5 px-4 text-right">Remaining Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {salesData.installmentSales.slice(0, 20).map((is) => (
+                      <tr key={is._id} className="hover:bg-slate-800/40">
+                        <td className="py-2.5 px-4 font-mono font-bold text-indigo-400">{is.saleNumber}</td>
+                        <td className="py-2.5 px-4 text-slate-300">{new Date(is.saleDate).toLocaleDateString('en-GB')}</td>
+                        <td className="py-2.5 px-4 text-white font-medium">{is.customerId?.customerName || 'Customer'}</td>
+                        <td className="py-2.5 px-4 text-center text-slate-300">{is.installmentDuration} Mo</td>
+                        <td className="py-2.5 px-4 text-right font-mono font-bold text-white">{currency} {is.totalSaleAmount?.toLocaleString()}</td>
+                        <td className="py-2.5 px-4 text-right font-mono font-bold text-emerald-400">{currency} {is.advancePayment?.toLocaleString()}</td>
+                        <td className="py-2.5 px-4 text-right font-mono font-bold text-rose-400">{currency} {is.totalRemainingBalance?.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* TAB 3: PROFIT ANALYSIS */}
+      {/* TAB 3: COLLECTIONS REPORT */}
+      {activeTab === 'collections' && collectionData && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="glass-panel p-4 border-slate-800">
+              <span className="text-xs text-slate-400">Total Collections Recovered</span>
+              <p className="text-2xl font-bold font-mono text-emerald-400 mt-1">
+                {currency} {collectionData.totalCollected?.toLocaleString()}
+              </p>
+            </div>
+            <div className="glass-panel p-4 border-slate-800">
+              <span className="text-xs text-slate-400">Transaction Receipts</span>
+              <p className="text-2xl font-bold font-mono text-white mt-1">
+                {collectionData.count || collectionData.payments?.length || 0} collections
+              </p>
+            </div>
+          </div>
+
+          {collectionData.payments && collectionData.payments.length > 0 && (
+            <div className="glass-panel overflow-hidden border-slate-800">
+              <div className="px-5 py-3 border-b border-slate-800 bg-slate-950/60 font-semibold text-xs text-white">
+                Recovered Installment Payments List
+              </div>
+              <div className="overflow-x-auto max-h-[360px]">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-950/80 text-slate-400 uppercase font-mono tracking-wider border-b border-slate-800 sticky top-0">
+                    <tr>
+                      <th className="py-2.5 px-4">Payment #</th>
+                      <th className="py-2.5 px-4">Receipt #</th>
+                      <th className="py-2.5 px-4">Date</th>
+                      <th className="py-2.5 px-4">Customer</th>
+                      <th className="py-2.5 px-4">Mode</th>
+                      <th className="py-2.5 px-4 text-right">Amount Recovered</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {collectionData.payments.slice(0, 25).map((p) => (
+                      <tr key={p._id} className="hover:bg-slate-800/40">
+                        <td className="py-2.5 px-4 font-mono font-bold text-indigo-400">{p.paymentNumber}</td>
+                        <td className="py-2.5 px-4 font-mono text-slate-400">{p.receiptId?.receiptNumber || '—'}</td>
+                        <td className="py-2.5 px-4 text-slate-300">{new Date(p.paymentDate).toLocaleDateString('en-GB')}</td>
+                        <td className="py-2.5 px-4 text-white font-medium">{p.customerId?.customerName || 'Customer'}</td>
+                        <td className="py-2.5 px-4 capitalize text-slate-400">{p.paymentMethod || 'cash'}</td>
+                        <td className="py-2.5 px-4 text-right font-mono font-bold text-emerald-400">
+                          {currency} {p.amount?.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 4: PROFIT ANALYSIS */}
       {activeTab === 'profit' && profitData && (
         <div className="glass-panel p-6 border-slate-800 space-y-4">
           <h3 className="font-display font-semibold text-white text-base">
@@ -253,7 +412,7 @@ export default function ReportsHub() {
         </div>
       )}
 
-      {/* TAB 4: STOCK VALUATION */}
+      {/* TAB 5: STOCK VALUATION */}
       {activeTab === 'stock' && stockData && (
         <div className="space-y-6">
           <div className="grid grid-cols-3 gap-4">
@@ -276,6 +435,44 @@ export default function ReportsHub() {
               </p>
             </div>
           </div>
+
+          {stockData.products && stockData.products.length > 0 && (
+            <div className="glass-panel overflow-hidden border-slate-800">
+              <div className="px-5 py-3 border-b border-slate-800 bg-slate-950/60 font-semibold text-xs text-white">
+                Physical Inventory Products List ({stockData.products.length} Products)
+              </div>
+              <div className="overflow-x-auto max-h-[380px]">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-950/80 text-slate-400 uppercase font-mono tracking-wider border-b border-slate-800 sticky top-0">
+                    <tr>
+                      <th className="py-2.5 px-4">Code</th>
+                      <th className="py-2.5 px-4">Product Name</th>
+                      <th className="py-2.5 px-4">Brand</th>
+                      <th className="py-2.5 px-4">Category</th>
+                      <th className="py-2.5 px-4 text-center">Stock</th>
+                      <th className="py-2.5 px-4 text-right">Purchase Price</th>
+                      <th className="py-2.5 px-4 text-right">Total Valuation</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {stockData.products.slice(0, 25).map((p) => (
+                      <tr key={p._id} className="hover:bg-slate-800/40">
+                        <td className="py-2.5 px-4 font-mono font-bold text-indigo-400">{p.productCode}</td>
+                        <td className="py-2.5 px-4 text-white font-medium">{p.productName}</td>
+                        <td className="py-2.5 px-4 text-slate-300">{p.brand}</td>
+                        <td className="py-2.5 px-4 text-slate-400">{p.categoryId?.categoryName || 'General'}</td>
+                        <td className="py-2.5 px-4 text-center font-bold text-white">{p.stockQuantity}</td>
+                        <td className="py-2.5 px-4 text-right font-mono text-slate-300">{currency} {p.purchasePrice?.toLocaleString()}</td>
+                        <td className="py-2.5 px-4 text-right font-mono font-bold text-cyan-400">
+                          {currency} {(p.stockQuantity * p.purchasePrice)?.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

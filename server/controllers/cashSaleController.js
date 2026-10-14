@@ -61,7 +61,8 @@ const createCashSale = async (req, res) => {
       items,
       paymentMethod = 'cash',
       amountReceived,
-      notes = ""
+      notes = "",
+      saleDate
     } = req.body;
 
     if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
@@ -165,10 +166,11 @@ const createCashSale = async (req, res) => {
     const received = Number(amountReceived) !== undefined && !isNaN(Number(amountReceived)) ? Number(amountReceived) : totalAmount;
     const change = Math.max(0, received - totalAmount);
     const profit = totalAmount - totalPurchaseCost;
+    const actualSaleDate = saleDate ? new Date(saleDate) : new Date();
 
     const cashSale = await CashSale.create({
       saleNumber,
-      saleDate: new Date(),
+      saleDate: actualSaleDate,
       customerId: customer._id,
       referralPartnerId: referralPartnerId || customer.referralPartnerId || null,
       items: processedItems,
@@ -185,7 +187,7 @@ const createCashSale = async (req, res) => {
     const paymentNumber = await generatePaymentId();
     const payment = await Payment.create({
       paymentNumber,
-      paymentDate: new Date(),
+      paymentDate: actualSaleDate,
       customerId: customer._id,
       paymentType: 'cash_sale',
       referenceType: 'cashSale',
@@ -199,7 +201,7 @@ const createCashSale = async (req, res) => {
     const receiptNumber = await generateReceiptId();
     const receipt = await Receipt.create({
       receiptNumber,
-      receiptDate: new Date(),
+      receiptDate: actualSaleDate,
       receiptType: 'cash_sale',
       customerId: customer._id,
       customerName: customer.customerName,

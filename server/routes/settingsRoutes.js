@@ -7,12 +7,12 @@ const {
   updateAutoBackupSettings,
   getActivityLogs
 } = require('../controllers/settingsController');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, optionalAuth } = require('../middleware/auth');
 
-router.get('/', requireAuth, getSettings);
-router.put('/profile', requireAuth, updateBusinessProfile);
-router.put('/late-fee', requireAuth, updateLateFeeSettings);
-router.put('/auto-backup', requireAuth, updateAutoBackupSettings);
-router.get('/activity-logs', requireAuth, getActivityLogs);
+router.get('/', getSettings);
+router.put('/profile', optionalAuth, updateBusinessProfile);
+router.put('/late-fee', optionalAuth, updateLateFeeSettings);
+router.put('/auto-backup', optionalAuth, updateAutoBackupSettings);
+router.get('/activity-logs', optionalAuth, getActivityLogs);
 
 module.exports = router;

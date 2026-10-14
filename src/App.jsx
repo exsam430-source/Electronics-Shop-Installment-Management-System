@@ -102,6 +102,7 @@ export default function App() {
         {/* Customers */}
         <Route path="customers" element={<CustomerList />} />
         <Route path="customers/new" element={<CustomerForm />} />
+        <Route path="customers/edit/:id" element={<CustomerForm />} />
 
         {/* Referral Partners */}
         <Route path="referral-partners" element={<PartnerList />} />

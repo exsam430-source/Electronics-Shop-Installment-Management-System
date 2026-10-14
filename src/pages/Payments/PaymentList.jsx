@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard, Calendar, Search, Filter, DollarSign, Receipt as ReceiptIcon } from 'lucide-react';
+import { CreditCard, Calendar, Search, Filter, DollarSign, Trash2, AlertCircle, Receipt as ReceiptIcon } from 'lucide-react';
 import api from '../../services/api';
 import { useShop } from '../../context/ShopContext';
 import ReceiptModal from '../../components/Receipt/ReceiptModal';
@@ -47,6 +47,23 @@ export default function PaymentList() {
   useEffect(() => {
     fetchPayments();
   }, [paymentType, paymentMethod, startDate, endDate]);
+
+  const handleCancelPayment = async (p) => {
+    const isConfirm = window.confirm(
+      `Are you sure you want to cancel and reverse payment ${p.paymentNumber} of ${currency} ${p.amount?.toLocaleString()}?\n\nThis will safely restore the customer balance and reset the installment schedule status.`
+    );
+    if (!isConfirm) return;
+
+    try {
+      const res = await api.delete(`/payments/${p._id}`);
+      if (res.data.success) {
+        alert(res.data.message || 'Payment cancelled successfully');
+        fetchPayments();
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to cancel payment');
+    }
+  };
 
   const handleViewReceipt = async (p) => {
     try {
@@ -199,12 +216,20 @@ export default function PaymentList() {
                     <td className="py-3 px-4 text-right font-bold text-emerald-400 text-sm">
                       +{currency} {p.amount?.toLocaleString()}
                     </td>
-                    <td className="py-3 px-4 text-center font-sans">
+                    <td className="py-3 px-4 text-center font-sans space-x-1.5 whitespace-nowrap">
                       <button
                         onClick={() => handleViewReceipt(p)}
-                        className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-indigo-400 text-xs font-semibold rounded-lg"
+                        className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-indigo-400 text-xs font-semibold rounded-lg transition"
                       >
                         Receipt
+                      </button>
+                      <button
+                        onClick={() => handleCancelPayment(p)}
+                        title="Cancel & Revert Payment"
+                        className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 text-xs font-semibold rounded-lg border border-rose-500/20 transition inline-flex items-center space-x-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Cancel</span>
                       </button>
                     </td>
                   </tr>

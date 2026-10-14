@@ -31,8 +31,19 @@ const generateSupplierId = async () => {
 };
 
 const generateCustomerId = async () => {
-  const count = await Customer.countDocuments();
-  return `CUST-${padZero(count + 1, 4)}`;
+  // Find highest existing SB- number or total count to avoid duplicate key error
+  const lastCustomer = await Customer.findOne({ customerId: /^SB-\d+/ }).sort({ customerId: -1 });
+  let nextNum = 1;
+  if (lastCustomer && lastCustomer.customerId) {
+    const match = lastCustomer.customerId.match(/^SB-(\d+)/);
+    if (match) {
+      nextNum = parseInt(match[1], 10) + 1;
+    }
+  } else {
+    const count = await Customer.countDocuments();
+    nextNum = count + 1;
+  }
+  return `SB-${padZero(nextNum, 4)}`;
 };
 
 const generatePartnerId = async () => {

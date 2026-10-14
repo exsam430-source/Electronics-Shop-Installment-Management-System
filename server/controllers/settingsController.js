@@ -46,8 +46,8 @@ const updateBusinessProfile = async (req, res) => {
       profile = new BusinessProfile({});
     }
 
-    if (shopName) profile.shopName = shopName.trim();
-    if (ownerName) profile.ownerName = ownerName.trim();
+    if (shopName !== undefined) profile.shopName = shopName.trim() || profile.shopName;
+    if (ownerName !== undefined) profile.ownerName = ownerName.trim();
     if (address !== undefined) profile.address = address;
     if (city !== undefined) profile.city = city;
     if (phone !== undefined) profile.phone = phone;

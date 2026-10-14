@@ -50,16 +50,52 @@ const getAllModelsMap = () => ({
 });
 
 /**
+ * Resolve safe backup directory that is guaranteed writable
+ */
+const resolveSafeBackupDir = (customDestPath = null, profile = null) => {
+  if (customDestPath && path.isAbsolute(customDestPath)) {
+    try {
+      if (!fs.existsSync(customDestPath)) fs.mkdirSync(customDestPath, { recursive: true });
+      return customDestPath;
+    } catch (e) {}
+  }
+
+  if (profile && profile.autoBackup && profile.autoBackup.backupPath) {
+    const p = profile.autoBackup.backupPath;
+    if (path.isAbsolute(p)) {
+      try {
+        if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
+        return p;
+      } catch (e) {}
+    }
+  }
+
+  const baseDataDir = process.env.DATA_DIR || path.join(__dirname, '../../data');
+  const target = path.join(baseDataDir, 'backups');
+
+  try {
+    if (!fs.existsSync(target)) {
+      fs.mkdirSync(target, { recursive: true });
+    }
+    return target;
+  } catch (e) {
+    const userDocs = path.join(process.env.USERPROFILE || 'C:', 'Documents', 'MR-SOLVER-Backups');
+    try {
+      fs.mkdirSync(userDocs, { recursive: true });
+      return userDocs;
+    } catch (err2) {
+      return path.join(baseDataDir);
+    }
+  }
+};
+
+/**
  * Creates a complete database snapshot compressed in .eshop_backup format
  */
 const createBackup = async (type = 'manual', customDestPath = null) => {
   try {
     const profile = await BusinessProfile.findOne();
-    const backupDir = customDestPath || (profile && profile.autoBackup && profile.autoBackup.backupPath) || path.join(process.cwd(), 'data', 'backups');
-
-    if (!fs.existsSync(backupDir)) {
-      fs.mkdirSync(backupDir, { recursive: true });
-    }
+    const backupDir = resolveSafeBackupDir(customDestPath, profile);
 
     const models = getAllModelsMap();
     const backupData = {
@@ -119,17 +155,32 @@ const createBackup = async (type = 'manual', customDestPath = null) => {
 };
 
 /**
- * Restore data from a .eshop_backup or .json backup file
+ * Restore data from a .eshop_backup or .json backup file (path or raw buffer)
  */
-const restoreBackup = async (filePath) => {
+const restoreBackup = async (filePathOrBuffer) => {
   try {
-    if (!fs.existsSync(filePath)) {
-      throw new Error('Backup file does not exist at specified path.');
+    let fileBuffer;
+    let label = 'uploaded backup';
+
+    if (Buffer.isBuffer(filePathOrBuffer)) {
+      fileBuffer = filePathOrBuffer;
+    } else {
+      let resolvedPath = filePathOrBuffer;
+      if (!fs.existsSync(resolvedPath)) {
+        // Try searching in backup directory
+        const backupDir = resolveSafeBackupDir();
+        const candidate = path.join(backupDir, path.basename(resolvedPath));
+        if (fs.existsSync(candidate)) {
+          resolvedPath = candidate;
+        } else {
+          throw new Error(`Backup file does not exist at: ${filePathOrBuffer}`);
+        }
+      }
+      label = path.basename(resolvedPath);
+      fileBuffer = fs.readFileSync(resolvedPath);
     }
 
-    const fileBuffer = fs.readFileSync(filePath);
     let parsedData;
-
     try {
       const decompressed = zlib.gunzipSync(fileBuffer);
       parsedData = JSON.parse(decompressed.toString('utf-8'));
@@ -138,7 +189,7 @@ const restoreBackup = async (filePath) => {
       parsedData = JSON.parse(fileBuffer.toString('utf-8'));
     }
 
-    if (!parsedData.collections) {
+    if (!parsedData || !parsedData.collections) {
       throw new Error('Invalid backup file structure: missing collections data.');
     }
 
@@ -156,7 +207,7 @@ const restoreBackup = async (filePath) => {
 
     return {
       success: true,
-      message: `Database successfully restored from ${path.basename(filePath)}`,
+      message: `Database successfully restored from ${label}`,
       collectionsRestored: Object.keys(parsedData.collections).length
     };
   } catch (error) {

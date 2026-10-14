@@ -25,7 +25,7 @@ const installmentSaleSchema = new mongoose.Schema({
   firstInstallmentAmount: { type: Number, default: 0, min: 0 },
   totalCollectedAtSale: { type: Number, default: 0, min: 0 },
   remainingBalance: { type: Number, required: true, min: 0 },
-  installmentDuration: { type: Number, required: true, enum: [3, 6, 9, 12] },
+  installmentDuration: { type: Number, required: true, enum: [3, 6, 9, 10, 12] },
   numberOfInstallments: { type: Number, required: true },
   monthlyInstallmentAmount: { type: Number, required: true },
   firstDueDate: { type: Date, required: true },

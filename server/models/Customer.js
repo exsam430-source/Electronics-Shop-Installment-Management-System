@@ -1,8 +1,9 @@
 const mongoose = require('mongoose');
 
 const customerSchema = new mongoose.Schema({
-  customerId: { type: String, required: true, unique: true }, // e.g. CUST-0001
+  customerId: { type: String, required: true, unique: true }, // e.g. SB-0001
   customerName: { type: String, required: true, trim: true },
+  customerPhoto: { type: String, default: "" }, // Base64 data URL or photo path
   mobileNumber: { type: String, required: true, trim: true },
   whatsappNumber: { type: String, trim: true },
   cnic: { type: String, trim: true, default: "" }, // Optional CNIC for identity in installments
@@ -13,6 +14,7 @@ const customerSchema = new mongoose.Schema({
   totalPurchases: { type: Number, default: 0 },
   totalPaid: { type: Number, default: 0 },
   outstandingBalance: { type: Number, default: 0 },
+  registrationDate: { type: Date, default: Date.now },
   isActive: { type: Boolean, default: true }
 }, { timestamps: true });
 

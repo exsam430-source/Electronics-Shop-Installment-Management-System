@@ -26,6 +26,7 @@ export default function NewCashSale() {
 
   // Form state
   const [customerId, setCustomerId] = useState('');
+  const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [amountReceived, setAmountReceived] = useState('');
   const [notes, setNotes] = useState('');
@@ -131,7 +132,8 @@ export default function NewCashSale() {
         items: formattedItems,
         paymentMethod,
         amountReceived: received,
-        notes
+        notes,
+        saleDate
       });
 
       if (res.data.success) {
@@ -173,7 +175,7 @@ export default function NewCashSale() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Customer Selection Card */}
-        <div className="glass-panel p-5 border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="glass-panel p-5 border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <div className="flex justify-between items-center mb-1">
               <label className="text-xs font-semibold text-slate-300">Customer *</label>
@@ -182,7 +184,7 @@ export default function NewCashSale() {
                 onClick={() => navigate('/customers/new')}
                 className="text-[11px] text-indigo-400 hover:text-indigo-300"
               >
-                + Register New Customer
+                + Register New
               </button>
             </div>
             <select
@@ -198,6 +200,17 @@ export default function NewCashSale() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">Sale Date *</label>
+            <input
+              type="date"
+              value={saleDate}
+              onChange={(e) => setSaleDate(e.target.value)}
+              required
+              className="w-full text-xs"
+            />
           </div>
 
           <div>

@@ -1,32 +1,51 @@
 import React, { useState } from 'react';
-import { Printer, X, Check, Copy } from 'lucide-react';
+import { Printer, Download, X, Check, Copy } from 'lucide-react';
 import api from '../../services/api';
 import { useShop } from '../../context/ShopContext';
+import { generateReceiptHtml, printHtmlDocument, saveHtmlToPdf } from '../../services/printService';
 
 export default function ReceiptModal({ receipt, onClose, onPrinted }) {
   const { profile } = useShop();
   const [printFormat, setPrintFormat] = useState(profile?.printerType || 'thermal_80');
   const [printing, setPrinting] = useState(false);
+  const [savingPdf, setSavingPdf] = useState(false);
 
   if (!receipt) return null;
 
   const handlePrint = async () => {
     setPrinting(true);
     try {
-      await api.post(`/receipts/${receipt._id}/print`);
-      if (onPrinted) onPrinted();
-
-      if (window.electronAPI && window.electronAPI.printReceipt) {
-        const content = document.getElementById('printable-receipt').innerHTML;
-        await window.electronAPI.printReceipt(content, { silent: false });
-      } else {
-        window.print();
+      try {
+        await api.post(`/receipts/${receipt._id}/print`);
+        if (onPrinted) onPrinted();
+      } catch (e) {
+        console.warn('Receipt print count update:', e);
       }
+
+      const fullHtml = generateReceiptHtml(receipt, profile, printFormat);
+      await printHtmlDocument(fullHtml, {
+        marginsType: 1,
+        printBackground: true
+      });
     } catch (err) {
       console.error('[Print error]:', err);
-      window.print();
     } finally {
       setPrinting(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    setSavingPdf(true);
+    try {
+      const fullHtml = generateReceiptHtml(receipt, profile, printFormat);
+      await saveHtmlToPdf(fullHtml, {
+        filename: `Receipt_${receipt.receiptNumber}.pdf`,
+        pageSize: printFormat === 'a4' ? 'A4' : undefined
+      });
+    } catch (err) {
+      console.error('[PDF save error]:', err);
+    } finally {
+      setSavingPdf(false);
     }
   };
 
@@ -34,7 +53,7 @@ export default function ReceiptModal({ receipt, onClose, onPrinted }) {
   const currency = profile?.currency || 'Rs.';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+    <div className="receipt-modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
         {/* Modal Top Bar */}
         <div className="px-6 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between no-print">
@@ -211,17 +230,26 @@ export default function ReceiptModal({ receipt, onClose, onPrinted }) {
             Print Count: <span className="text-slate-200 font-bold">{receipt.printCount}</span>
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2.5">
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition"
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition"
             >
               Close
             </button>
             <button
+              onClick={handleDownloadPdf}
+              disabled={savingPdf}
+              className="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-xs font-semibold rounded-lg transition hover:scale-[1.02]"
+              title="Save Receipt as PDF file"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>{savingPdf ? 'Saving...' : 'Save PDF'}</span>
+            </button>
+            <button
               onClick={handlePrint}
               disabled={printing}
-              className="flex items-center space-x-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-md shadow-indigo-600/30 transition-all hover:scale-[1.02]"
+              className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-md shadow-indigo-600/30 transition-all hover:scale-[1.02]"
             >
               <Printer className="w-4 h-4" />
               <span>{printing ? 'Printing...' : 'Print Receipt Now'}</span>

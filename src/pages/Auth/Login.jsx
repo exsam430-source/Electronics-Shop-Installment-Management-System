@@ -147,6 +147,24 @@ export default function Login() {
             >
               {loading ? 'Authenticating...' : 'Sign In to Shop Manager'}
             </button>
+
+            {/* Default Administrator Quick Access Helper */}
+            <div className="mt-3 p-3 bg-slate-800/60 border border-slate-700/60 rounded-xl text-xs flex items-center justify-between">
+              <div>
+                <span className="text-slate-400 block text-[11px]">Default Admin Login:</span>
+                <span className="font-mono text-emerald-400 font-medium">admin</span> / <span className="font-mono text-emerald-400 font-medium">admin123</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setUsername('admin');
+                  setPassword('admin123');
+                }}
+                className="px-2.5 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-[11px] font-medium transition"
+              >
+                Auto-fill
+              </button>
+            </div>
           </form>
         ) : (
           <form onSubmit={handleRecover} className="space-y-4">

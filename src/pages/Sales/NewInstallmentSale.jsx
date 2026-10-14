@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CalendarClock,
   Plus,
@@ -18,6 +18,7 @@ import ReceiptModal from '../../components/Receipt/ReceiptModal';
 export default function NewInstallmentSale() {
   const { profile } = useShop();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
@@ -26,9 +27,10 @@ export default function NewInstallmentSale() {
   const [error, setError] = useState('');
 
   // Form State
-  const [customerId, setCustomerId] = useState('');
+  const [customerId, setCustomerId] = useState(searchParams.get('customerId') || '');
+  const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [referralPartnerId, setReferralPartnerId] = useState('');
-  const [duration, setDuration] = useState(12); // 3, 6, 9, 12
+  const [duration, setDuration] = useState(12); // 3, 6, 9, 10, 12
   const [advancePayment, setAdvancePayment] = useState('0');
   const [collectFirstInstallment, setCollectFirstInstallment] = useState(false);
   const [firstDueDate, setFirstDueDate] = useState('');
@@ -46,16 +48,33 @@ export default function NewInstallmentSale() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [custRes, prodRes, partRes] = await Promise.all([
-          api.get('/customers'),
-          api.get('/products?status=available'),
-          api.get('/referral-partners')
-        ]);
-        if (custRes.data.success) setCustomers(custRes.data.data);
+        const custRes = await api.get('/customers');
+        if (custRes.data.success) {
+          setCustomers(custRes.data.data);
+          const initialCustId = searchParams.get('customerId');
+          if (initialCustId) {
+            const found = custRes.data.data.find(c => c._id === initialCustId);
+            if (found && found.referralPartnerId) {
+              setReferralPartnerId(found.referralPartnerId._id || found.referralPartnerId);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error fetching customers', e);
+      }
+
+      try {
+        const prodRes = await api.get('/products?status=available');
         if (prodRes.data.success) setProducts(prodRes.data.data);
+      } catch (e) {
+        console.error('Error fetching products', e);
+      }
+
+      try {
+        const partRes = await api.get('/referral-partners');
         if (partRes.data.success) setPartners(partRes.data.data);
-      } catch (err) {
-        console.error(err);
+      } catch (e) {
+        console.error('Error fetching partners', e);
       }
     };
     fetchData();
@@ -195,12 +214,14 @@ export default function NewInstallmentSale() {
         customerId,
         referralPartnerId: referralPartnerId || null,
         items: formattedItems,
-        installmentDuration: duration,
+        duration: parseInt(duration, 10),
+        installmentDuration: parseInt(duration, 10),
         advancePayment: advance,
         firstInstallmentCollected: collectFirstInstallment,
         firstDueDate,
         paymentMethod,
-        notes
+        notes,
+        saleDate
       });
 
       if (res.data.success) {
@@ -228,7 +249,7 @@ export default function NewInstallmentSale() {
         <div>
           <h1 className="font-display font-bold text-2xl text-white">Create New Installment Sale Plan</h1>
           <p className="text-xs text-slate-400">
-            Supports single or multiple appliances, 3/6/9/12 months, optional advance and schedule generation
+            Supports single or multiple appliances, 3/6/9/10/12 months, optional advance and schedule generation
           </p>
         </div>
       </div>
@@ -241,8 +262,8 @@ export default function NewInstallmentSale() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Customer & Referral Partner */}
-        <div className="glass-panel p-5 border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Customer & Referral Partner & Sale Date */}
+        <div className="glass-panel p-5 border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <div className="flex justify-between items-center mb-1">
               <label className="text-xs font-semibold text-slate-300">Customer *</label>
@@ -251,7 +272,7 @@ export default function NewInstallmentSale() {
                 onClick={() => navigate('/customers/new')}
                 className="text-[11px] text-indigo-400 hover:text-indigo-300"
               >
-                + Register New Customer
+                + Register New
               </button>
             </div>
             <select
@@ -270,8 +291,19 @@ export default function NewInstallmentSale() {
           </div>
 
           <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">Sale Date *</label>
+            <input
+              type="date"
+              value={saleDate}
+              onChange={(e) => setSaleDate(e.target.value)}
+              required
+              className="w-full text-xs"
+            />
+          </div>
+
+          <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Referral Partner (1% Commission)
+              Referral Partner (Commission)
             </label>
             <select
               value={referralPartnerId}
@@ -413,19 +445,19 @@ export default function NewInstallmentSale() {
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                 Installment Duration *
               </label>
-              <div className="grid grid-cols-2 gap-2">
-                {[3, 6, 9, 12].map((m) => (
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                {[3, 6, 9, 10, 12].map((m) => (
                   <button
                     key={m}
                     type="button"
                     onClick={() => setDuration(m)}
-                    className={`py-2 px-3 text-xs font-bold rounded-lg border transition ${
+                    className={`py-2 px-2 text-xs font-bold rounded-lg border text-center transition ${
                       duration === m
                         ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/30'
                         : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
                     }`}
                   >
-                    {m} Months
+                    {m} Mo
                   </button>
                 ))}
               </div>

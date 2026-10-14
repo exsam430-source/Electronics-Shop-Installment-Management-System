@@ -8,5 +8,9 @@ echo   100%% Offline Desktop Software Application
 echo ===================================================================
 echo Starting internal engine and launching desktop application...
 
-start "" npx electron .
+if exist "%~dp0release\MR-SOLVER-Electronics-Shop-win32-x64\MR-SOLVER-Electronics-Shop.exe" (
+    start "" "%~dp0release\MR-SOLVER-Electronics-Shop-win32-x64\MR-SOLVER-Electronics-Shop.exe"
+) else (
+    start "" npx electron .
+)
 exit

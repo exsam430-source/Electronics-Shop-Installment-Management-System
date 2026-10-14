@@ -71,21 +71,22 @@ const createInstallmentSale = async (req, res) => {
       customerId,
       referralPartnerId,
       items,
-      installmentDuration, // 3, 6, 9, 12
+      installmentDuration, // 3, 6, 9, 10, 12
       advancePayment = 0,
       firstInstallmentCollected = false,
       firstDueDate,
       paymentMethod = 'cash',
-      notes = ""
+      notes = "",
+      saleDate
     } = req.body;
 
     if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Customer and at least one product required.' });
     }
 
-    const duration = parseInt(installmentDuration, 10);
-    if (![3, 6, 9, 12].includes(duration)) {
-      return res.status(400).json({ success: false, message: 'Duration must be 3, 6, 9, or 12 months.' });
+    const duration = parseInt(installmentDuration || req.body.duration, 10);
+    if (![3, 6, 9, 10, 12].includes(duration)) {
+      return res.status(400).json({ success: false, message: 'Duration must be 3, 6, 9, 10, or 12 months.' });
     }
 
     const customer = await Customer.findById(customerId);
@@ -198,6 +199,7 @@ const createInstallmentSale = async (req, res) => {
 
     const remainingBalance = totalSaleAmount - totalCollectedAtSale;
     const profit = totalSaleAmount - totalPurchaseCost;
+    const actualSaleDate = saleDate ? new Date(saleDate) : new Date();
 
     const baseDueDate = firstDueDate ? new Date(firstDueDate) : new Date();
     if (!firstDueDate) {
@@ -206,7 +208,7 @@ const createInstallmentSale = async (req, res) => {
 
     const installmentSale = await InstallmentSale.create({
       saleNumber,
-      saleDate: new Date(),
+      saleDate: actualSaleDate,
       customerId: customer._id,
       referralPartnerId: referralPartnerId || customer.referralPartnerId || null,
       items: processedItems,
@@ -236,7 +238,7 @@ const createInstallmentSale = async (req, res) => {
       const advPayNumber = await generatePaymentId();
       const advPayment = await Payment.create({
         paymentNumber: advPayNumber,
-        paymentDate: new Date(),
+        paymentDate: actualSaleDate,
         customerId: customer._id,
         paymentType: 'advance_payment',
         referenceType: 'installmentSale',
@@ -249,7 +251,7 @@ const createInstallmentSale = async (req, res) => {
       const advReceiptNumber = await generateReceiptId();
       advanceReceipt = await Receipt.create({
         receiptNumber: advReceiptNumber,
-        receiptDate: new Date(),
+        receiptDate: actualSaleDate,
         receiptType: 'advance_payment',
         customerId: customer._id,
         customerName: customer.customerName,
@@ -293,7 +295,7 @@ const createInstallmentSale = async (req, res) => {
       const firstPayNumber = await generatePaymentId();
       const firstPayment = await Payment.create({
         paymentNumber: firstPayNumber,
-        paymentDate: new Date(),
+        paymentDate: actualSaleDate,
         customerId: customer._id,
         paymentType: 'installment_payment',
         referenceType: 'installmentSale',
@@ -307,7 +309,7 @@ const createInstallmentSale = async (req, res) => {
       const firstRecNumber = await generateReceiptId();
       firstInstReceipt = await Receipt.create({
         receiptNumber: firstRecNumber,
-        receiptDate: new Date(),
+        receiptDate: actualSaleDate,
         receiptType: 'installment_payment',
         customerId: customer._id,
         customerName: customer.customerName,

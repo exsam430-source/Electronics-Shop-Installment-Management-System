@@ -1,6 +1,9 @@
+const User = require('../models/User');
+const Customer = require('../models/Customer');
 const Category = require('../models/Category');
 const BusinessProfile = require('../models/BusinessProfile');
 const Settings = require('../models/Settings');
+const bcrypt = require('bcryptjs');
 
 const PRELOADED_CATEGORIES = [
   "Refrigerators",
@@ -24,6 +27,36 @@ const PRELOADED_CATEGORIES = [
 
 const seedInitialData = async () => {
   try {
+    // 0. Seed Default Administrator if no user exists
+    const userCount = await User.countDocuments();
+    if (userCount === 0) {
+      console.log('[Seed] Seeding default Administrator account...');
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash('admin123', salt);
+      const securityAnswerHash = await bcrypt.hash('electronics', salt);
+
+      await User.create({
+        username: 'admin',
+        passwordHash,
+        fullName: 'Shop Administrator',
+        role: 'admin',
+        securityQuestion: 'What is your primary shop location?',
+        securityAnswerHash,
+        isActive: true
+      });
+      console.log('[Seed] Default Administrator created successfully (admin / admin123).');
+    }
+
+    // 0.1 Migrate any legacy customer IDs from CUST- to SB-
+    const legacyCustomers = await Customer.find({ customerId: /^CUST-\d+/ });
+    if (legacyCustomers.length > 0) {
+      console.log(`[Seed] Migrating ${legacyCustomers.length} legacy customer IDs to SB- format...`);
+      for (const cust of legacyCustomers) {
+        const newId = cust.customerId.replace(/^CUST-/, 'SB-');
+        await Customer.updateOne({ _id: cust._id }, { $set: { customerId: newId } });
+        console.log(`[Seed] Migrated Customer ID: ${cust.customerId} -> ${newId}`);
+      }
+    }
     // 1. Seed Categories if empty
     const categoryCount = await Category.countDocuments();
     if (categoryCount === 0) {

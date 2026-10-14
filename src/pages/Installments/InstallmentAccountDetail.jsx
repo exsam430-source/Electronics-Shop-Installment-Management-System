@@ -10,6 +10,7 @@ import {
   CheckCircle,
   AlertTriangle,
   Clock,
+  Trash2,
   X
 } from 'lucide-react';
 import api from '../../services/api';
@@ -53,6 +54,23 @@ export default function InstallmentAccountDetail() {
   useEffect(() => {
     fetchDetail();
   }, [id]);
+
+  const handleCancelPayment = async (paymentId, paymentNumber, amount) => {
+    const isConfirm = window.confirm(
+      `Are you sure you want to cancel and reverse this installment payment of ${currency} ${amount?.toLocaleString()}?\n\nThis will safely deduct the amount from total paid, restore remaining balance, and revert the schedule status.`
+    );
+    if (!isConfirm) return;
+
+    try {
+      const res = await api.delete(`/payments/${paymentId}`);
+      if (res.data.success) {
+        alert(res.data.message || 'Payment successfully cancelled');
+        fetchDetail();
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to cancel payment');
+    }
+  };
 
   const handleOpenPay = (sched) => {
     setPayModalSchedule(sched);
@@ -253,15 +271,30 @@ export default function InstallmentAccountDetail() {
                       >
                         Pay
                       </button>
-                    ) : sched.receiptId ? (
-                      <button
-                        onClick={() => setCreatedReceipt(sched.receiptId)}
-                        className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-indigo-400 text-xs font-semibold rounded-lg"
-                      >
-                        Receipt
-                      </button>
                     ) : (
-                      <span className="text-slate-500 text-[11px]">✓ Settled</span>
+                      <div className="flex items-center justify-center space-x-1.5 whitespace-nowrap">
+                        {sched.receiptId && (
+                          <button
+                            onClick={() => setCreatedReceipt(sched.receiptId)}
+                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-indigo-400 text-xs font-semibold rounded-lg"
+                          >
+                            Receipt
+                          </button>
+                        )}
+                        {sched.paymentId && (
+                          <button
+                            onClick={() => handleCancelPayment(sched.paymentId?._id || sched.paymentId, sched.paymentId?.paymentNumber, sched.amountPaid)}
+                            title="Cancel & Revert this payment"
+                            className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold rounded-lg border border-rose-500/20 transition inline-flex items-center space-x-1"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Cancel</span>
+                          </button>
+                        )}
+                        {!sched.receiptId && !sched.paymentId && (
+                          <span className="text-slate-500 text-[11px]">✓ Settled</span>
+                        )}
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -270,6 +303,53 @@ export default function InstallmentAccountDetail() {
           </table>
         </div>
       </div>
+
+      {/* Recorded Payment Receipts History */}
+      {payments && payments.length > 0 && (
+        <div className="glass-panel overflow-hidden border-slate-800">
+          <div className="px-5 py-3.5 border-b border-slate-800 bg-slate-950/60 flex justify-between items-center">
+            <h3 className="font-display font-semibold text-white text-sm">
+              Recorded Payments & Vouchers ({payments.length})
+            </h3>
+            <span className="text-xs text-slate-400 font-mono">
+              Total Collected: {currency} {payments.reduce((acc, p) => acc + (p.amount || 0), 0).toLocaleString()}
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-950/80 text-slate-400 font-mono uppercase tracking-wider border-b border-slate-800">
+                <tr>
+                  <th className="py-2.5 px-4">Voucher #</th>
+                  <th className="py-2.5 px-4">Date & Time</th>
+                  <th className="py-2.5 px-4">Method</th>
+                  <th className="py-2.5 px-4 text-right">Amount Received</th>
+                  <th className="py-2.5 px-4 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 font-mono">
+                {payments.map(p => (
+                  <tr key={p._id} className="hover:bg-slate-800/30 transition">
+                    <td className="py-2.5 px-4 text-indigo-400 font-bold">{p.paymentNumber}</td>
+                    <td className="py-2.5 px-4 text-slate-300 font-sans">{new Date(p.paymentDate).toLocaleString('en-GB')}</td>
+                    <td className="py-2.5 px-4 capitalize text-slate-400 font-sans">{p.paymentMethod}</td>
+                    <td className="py-2.5 px-4 text-right text-emerald-400 font-bold">+{currency} {p.amount?.toLocaleString()}</td>
+                    <td className="py-2.5 px-4 text-center space-x-1.5 font-sans whitespace-nowrap">
+                      <button
+                        onClick={() => handleCancelPayment(p._id, p.paymentNumber, p.amount)}
+                        className="px-2 py-0.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold rounded-lg border border-rose-500/20 transition inline-flex items-center space-x-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Cancel Payment</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Pay Schedule Modal */}
       {payModalSchedule && (

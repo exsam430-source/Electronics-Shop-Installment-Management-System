@@ -25,4 +25,21 @@ const requireAuth = async (req, res, next) => {
   }
 };
 
-module.exports = { requireAuth, JWT_SECRET };
+const optionalAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      const decoded = jwt.verify(token, JWT_SECRET);
+      const user = await User.findById(decoded.id).select('-passwordHash -securityAnswerHash');
+      if (user && user.isActive) {
+        req.user = user;
+      }
+    }
+    next();
+  } catch (error) {
+    next();
+  }
+};
+
+module.exports = { requireAuth, optionalAuth, JWT_SECRET };

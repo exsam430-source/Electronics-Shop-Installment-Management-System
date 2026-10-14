@@ -34,8 +34,15 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Resolve safe data directory (passed from Electron or fallback)
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../data');
+const uploadsDir = path.join(DATA_DIR, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  try { fs.mkdirSync(uploadsDir, { recursive: true }); } catch (e) {}
+}
+
 // Static uploads & client build (for production packaging or built offline distribution)
-app.use('/data/uploads', express.static(path.join(process.cwd(), 'data', 'uploads')));
+app.use('/data/uploads', express.static(uploadsDir));
 const distPath = path.join(__dirname, '../dist');
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));

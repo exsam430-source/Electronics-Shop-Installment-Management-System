@@ -10,6 +10,7 @@ import {
   DollarSign,
   Handshake,
   Printer,
+  Download,
   PlusCircle,
   Filter,
   ArrowUpRight,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import { useShop } from '../../context/ShopContext';
+import { generateDashboardSummaryHtml, printHtmlDocument, saveHtmlToPdf } from '../../services/printService';
 
 export default function Dashboard() {
   const { profile } = useShop();
@@ -67,8 +69,29 @@ export default function Dashboard() {
     }
   };
 
-  const handlePrintDashboard = () => {
-    window.print();
+  const getFilterLabel = () => {
+    if (filter === 'all') return 'Lifetime Business Financial Position';
+    if (filter === 'today') return `Today (${new Date().toLocaleDateString('en-GB')})`;
+    if (filter === 'this_week') return 'Current Week';
+    if (filter === 'this_month') return 'Current Month';
+    if (filter === 'custom') return `Custom Date Period (${startDate || 'Start'} to ${endDate || 'End'})`;
+    if (filter === 'month_year') return `Month ${selMonth + 1}/${selYear}`;
+    return 'Summary Period';
+  };
+
+  const handlePrintDashboard = async () => {
+    if (!stats) return;
+    const fullHtml = generateDashboardSummaryHtml(stats, profile, getFilterLabel());
+    await printHtmlDocument(fullHtml, { pageSize: 'A4' });
+  };
+
+  const handleSaveDashboardPdf = async () => {
+    if (!stats) return;
+    const fullHtml = generateDashboardSummaryHtml(stats, profile, getFilterLabel());
+    await saveHtmlToPdf(fullHtml, {
+      filename: `Business_Dashboard_Summary_${Date.now()}.pdf`,
+      pageSize: 'A4'
+    });
   };
 
   const currency = profile?.currency || 'Rs.';
@@ -157,13 +180,24 @@ export default function Dashboard() {
             </form>
           )}
 
-          <button
-            onClick={handlePrintDashboard}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg border border-slate-700 transition"
-          >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Print Summary</span>
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleSaveDashboardPdf}
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-semibold rounded-lg border border-cyan-500/30 transition shadow-sm hover:scale-[1.02]"
+              title="Save executive summary report as PDF"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Save PDF</span>
+            </button>
+            <button
+              onClick={handlePrintDashboard}
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-sm shadow-indigo-600/30 transition hover:scale-[1.02]"
+              title="Print executive financial summary"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print Summary</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -191,7 +225,7 @@ export default function Dashboard() {
           </div>
           <div className="text-left">
             <p className="text-xs font-bold text-white">New Installment</p>
-            <p className="text-[10px] text-slate-400">3, 6, 9 or 12 mo plan</p>
+            <p className="text-[10px] text-slate-400">3, 6, 9, 10 or 12 mo plan</p>
           </div>
         </button>
 

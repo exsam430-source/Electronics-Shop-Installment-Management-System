@@ -64,13 +64,15 @@ const createCustomer = async (req, res) => {
   try {
     const {
       customerName,
+      customerPhoto,
       mobileNumber,
       whatsappNumber,
       cnic,
       address,
       guarantorName,
       guarantorMobile,
-      referralPartnerId
+      referralPartnerId,
+      registrationDate
     } = req.body;
 
     if (!customerName || !mobileNumber) {
@@ -79,17 +81,21 @@ const createCustomer = async (req, res) => {
 
     const customerId = await generateCustomerId();
     const finalWhatsApp = whatsappNumber && whatsappNumber.trim() ? whatsappNumber.trim() : mobileNumber.trim();
+    const regDate = registrationDate ? new Date(registrationDate) : new Date();
 
     const customer = await Customer.create({
       customerId,
       customerName: customerName.trim(),
+      customerPhoto: customerPhoto || "",
       mobileNumber: mobileNumber.trim(),
       whatsappNumber: finalWhatsApp,
       cnic: cnic ? cnic.trim() : "",
       address: address || "",
       guarantorName: guarantorName || "",
       guarantorMobile: guarantorMobile || "",
-      referralPartnerId: referralPartnerId || null
+      referralPartnerId: referralPartnerId || null,
+      registrationDate: regDate,
+      createdAt: regDate
     });
 
     await logActivity(req, 'create', 'customer', `Created customer ${customer.customerName} (${customerId})`, customer._id);
@@ -104,13 +110,15 @@ const updateCustomer = async (req, res) => {
   try {
     const {
       customerName,
+      customerPhoto,
       mobileNumber,
       whatsappNumber,
       cnic,
       address,
       guarantorName,
       guarantorMobile,
-      referralPartnerId
+      referralPartnerId,
+      registrationDate
     } = req.body;
 
     const customer = await Customer.findById(req.params.id);
@@ -119,6 +127,8 @@ const updateCustomer = async (req, res) => {
     }
 
     if (customerName) customer.customerName = customerName.trim();
+    if (customerPhoto !== undefined) customer.customerPhoto = customerPhoto;
+    if (registrationDate) customer.registrationDate = new Date(registrationDate);
     if (mobileNumber) customer.mobileNumber = mobileNumber.trim();
     if (whatsappNumber !== undefined) customer.whatsappNumber = whatsappNumber.trim();
     if (cnic !== undefined) customer.cnic = cnic.trim();

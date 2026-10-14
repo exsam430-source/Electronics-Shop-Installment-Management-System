@@ -75,9 +75,10 @@ export default function Settings() {
 
   // Activity Logs
   const [activityLogs, setActivityLogs] = useState([]);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    if (profile) {
+    if (profile && !initialized) {
       setProfileForm({
         shopName: profile.shopName || '',
         ownerName: profile.ownerName || '',
@@ -98,8 +99,9 @@ export default function Settings() {
       if (profile.autoBackup) {
         setBackupForm({ ...profile.autoBackup });
       }
+      setInitialized(true);
     }
-  }, [profile]);
+  }, [profile, initialized]);
 
   useEffect(() => {
     if (activeTab === 'backup') fetchBackupLogs();
@@ -144,6 +146,11 @@ export default function Settings() {
       const res = await api.put('/settings/profile', profileForm);
       if (res.data.success) {
         setSuccessMsg('Business Profile updated successfully!');
+        if (res.data.profile) {
+          try {
+            localStorage.setItem('eshop_cached_profile', JSON.stringify(res.data.profile));
+          } catch (err) {}
+        }
         await refreshProfile();
       }
     } catch (err) {
@@ -207,6 +214,76 @@ export default function Settings() {
       alert(err.response?.data?.message || 'Backup failed');
     } finally {
       setBackingUp(false);
+    }
+  };
+
+  const [selectedBackupFile, setSelectedBackupFile] = useState(null);
+  const [uploadingRestore, setUploadingRestore] = useState(false);
+
+  const handleDownloadBackup = (filePathOrName) => {
+    const fileName = filePathOrName.includes('/') || filePathOrName.includes('\\')
+      ? filePathOrName.split(/[/\\]/).pop()
+      : filePathOrName;
+    const token = localStorage.getItem('eshop_token');
+    const downloadUrl = `/api/backups/download/${encodeURIComponent(fileName)}`;
+    
+    // Trigger browser download via anchor
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.setAttribute('download', fileName);
+    // Include auth token via fetch blob or direct header
+    fetch(downloadUrl, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('File download failed');
+        return res.blob();
+      })
+      .then((blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      })
+      .catch((err) => alert('Failed to download backup: ' + err.message));
+  };
+
+  const handleFileUploadRestore = async (e) => {
+    e.preventDefault();
+    if (!selectedBackupFile) {
+      alert('Please choose a backup file to restore.');
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `WARNING: Restoring from "${selectedBackupFile.name}" will completely overwrite all current database records. Do you wish to continue?`
+      )
+    ) {
+      return;
+    }
+
+    setUploadingRestore(true);
+    try {
+      const formData = new FormData();
+      formData.append('backupFile', selectedBackupFile);
+
+      const res = await api.post('/backups/upload-restore', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      if (res.data.success) {
+        alert('Database restored successfully! Reloading application...');
+        window.location.reload();
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Restore failed. Please verify the backup file.');
+    } finally {
+      setUploadingRestore(false);
     }
   };
 
@@ -398,7 +475,16 @@ export default function Settings() {
               <label className="block text-xs font-semibold text-slate-300 mb-1">Shop Logo</label>
               <div className="flex items-center space-x-3">
                 {profileForm.logo && (
-                  <img src={profileForm.logo} alt="Logo" className="w-10 h-10 object-contain rounded-lg border border-slate-700 bg-slate-950" />
+                  <div className="flex items-center space-x-2">
+                    <img src={profileForm.logo} alt="Logo" className="w-10 h-10 object-contain rounded-lg border border-slate-700 bg-slate-950" />
+                    <button
+                      type="button"
+                      onClick={() => setProfileForm((prev) => ({ ...prev, logo: '' }))}
+                      className="px-2 py-1 bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 text-[10px] font-semibold rounded transition"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 )}
                 <input
                   type="file"
@@ -690,55 +776,101 @@ export default function Settings() {
             </div>
           </form>
 
-          {/* Restore from File */}
-          <form onSubmit={handleRestoreSubmit} className="glass-panel p-6 border-slate-800 space-y-4">
+          {/* Restore from File (Easy File Picker + Fallback Path) */}
+          <div className="glass-panel p-6 border-slate-800 space-y-4">
             <div>
               <h3 className="font-display font-semibold text-white text-sm">Restore Database from Backup File</h3>
-              <p className="text-xs text-rose-400">
-                ⚠️ Warning: Restoring replaces all current database collections with the chosen backup dump.
+              <p className="text-xs text-amber-400 mt-0.5">
+                Select your saved <code className="text-white">.eshop_backup</code> or <code className="text-white">.json</code> snapshot file to restore all shop records.
               </p>
             </div>
 
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Enter full path to .eshop_backup file"
-                value={restorePath}
-                onChange={(e) => setRestorePath(e.target.value)}
-                required
-                className="flex-1 text-xs font-mono"
-              />
-              <button
-                type="submit"
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-xl transition"
-              >
-                Restore Database
-              </button>
-            </div>
-          </form>
+            {/* Easy File Upload Restore */}
+            <form onSubmit={handleFileUploadRestore} className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3">
+              <label className="block text-xs font-semibold text-slate-300">Option 1: Choose Backup File from Computer (Recommended)</label>
+              <div className="flex flex-col sm:flex-row gap-3 items-center">
+                <input
+                  type="file"
+                  accept=".eshop_backup,.json"
+                  onChange={(e) => setSelectedBackupFile(e.target.files[0] || null)}
+                  className="w-full text-xs file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 file:cursor-pointer text-slate-400"
+                />
+                <button
+                  type="submit"
+                  disabled={!selectedBackupFile || uploadingRestore}
+                  className="w-full sm:w-auto shrink-0 px-5 py-2.5 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-lg shadow-rose-600/30 transition"
+                >
+                  {uploadingRestore ? 'Restoring Database...' : 'Restore Selected File'}
+                </button>
+              </div>
+            </form>
+
+            {/* Manual Path Fallback */}
+            <form onSubmit={handleRestoreSubmit} className="pt-2">
+              <label className="block text-[11px] text-slate-400 mb-1">Option 2: Or enter custom full system path (Advanced)</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="e.g. C:\backups\backup_2026.eshop_backup"
+                  value={restorePath}
+                  onChange={(e) => setRestorePath(e.target.value)}
+                  className="flex-1 text-xs font-mono"
+                />
+                <button
+                  type="submit"
+                  disabled={!restorePath}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs font-medium rounded-xl transition"
+                >
+                  Restore Path
+                </button>
+              </div>
+            </form>
+          </div>
 
           {/* Backup History Logs */}
           <div className="glass-panel overflow-hidden border-slate-800">
-            <div className="px-5 py-3 border-b border-slate-800 bg-slate-950/60 font-semibold text-xs text-slate-300">
-              Backup History & Logs ({backupLogs.length})
+            <div className="px-5 py-3 border-b border-slate-800 bg-slate-950/60 font-semibold text-xs text-slate-300 flex justify-between items-center">
+              <span>Backup History & Logs ({backupLogs.length})</span>
+              <button
+                type="button"
+                onClick={fetchBackupLogs}
+                className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium flex items-center space-x-1"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Refresh</span>
+              </button>
             </div>
-            <div className="divide-y divide-slate-800/60 font-mono text-xs max-h-48 overflow-y-auto">
-              {backupLogs.map((log) => (
-                <div key={log._id} className="p-3 px-5 flex justify-between items-center text-[11px]">
-                  <div>
-                    <span className="text-slate-200">{new Date(log.backupDate).toLocaleString('en-GB')}</span>
-                    <span className="text-slate-500 ml-2">({log.backupType})</span>
+            <div className="divide-y divide-slate-800/60 font-mono text-xs max-h-56 overflow-y-auto">
+              {backupLogs.length === 0 ? (
+                <div className="p-4 text-center text-slate-500 text-xs font-sans">No backups recorded yet. Click "Backup Now" above.</div>
+              ) : (
+                backupLogs.map((log) => (
+                  <div key={log._id} className="p-3 px-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-[11px]">
+                    <div>
+                      <span className="text-slate-200">{new Date(log.backupDate).toLocaleString('en-GB')}</span>
+                      <span className="text-slate-500 ml-2">({log.backupType})</span>
+                      <div className="text-[10px] text-slate-500 font-mono truncate max-w-xs">{log.backupPath}</div>
+                    </div>
+                    <div className="flex items-center space-x-3 shrink-0">
+                      <span className="text-indigo-400 font-bold">{log.backupSize}</span>
+                      <span className={`px-2 py-0.5 rounded uppercase text-[9px] font-sans font-bold ${
+                        log.status === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                      }`}>
+                        {log.status}
+                      </span>
+                      {log.status === 'success' && (
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadBackup(log.backupPath)}
+                          className="px-2.5 py-1 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 rounded text-[10px] font-sans font-medium transition"
+                        >
+                          Download
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-3">
-                    <span className="text-indigo-400 font-bold">{log.backupSize}</span>
-                    <span className={`px-2 py-0.5 rounded uppercase text-[9px] font-sans font-bold ${
-                      log.status === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
-                    }`}>
-                      {log.status}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

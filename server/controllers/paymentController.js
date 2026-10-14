@@ -1,4 +1,9 @@
 const Payment = require('../models/Payment');
+const InstallmentSale = require('../models/InstallmentSale');
+const InstallmentSchedule = require('../models/InstallmentSchedule');
+const Customer = require('../models/Customer');
+const Receipt = require('../models/Receipt');
+const { logActivity } = require('../middleware/activityLogger');
 
 const getPayments = async (req, res) => {
   try {
@@ -72,7 +77,123 @@ const getTodayCollections = async (req, res) => {
   }
 };
 
+const cancelPayment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const payment = await Payment.findById(id);
+
+    if (!payment) {
+      return res.status(404).json({ success: false, message: 'Payment record not found.' });
+    }
+
+    const payAmt = Number(payment.amount) || 0;
+
+    // Handle installment payment reversal
+    if (payment.paymentType === 'installment_payment') {
+      const sale = await InstallmentSale.findById(payment.referenceId);
+      const customer = await Customer.findById(payment.customerId);
+
+      // Revert schedules linked to this payment
+      const schedules = await InstallmentSchedule.find({
+        installmentSaleId: payment.referenceId,
+        paymentId: payment._id
+      }).sort({ installmentNumber: -1 });
+
+      let rollbackRemaining = payAmt;
+
+      for (const sched of schedules) {
+        if (rollbackRemaining <= 0) break;
+
+        const paidOnThis = Math.min(sched.amountPaid, rollbackRemaining);
+        sched.amountPaid = Math.max(0, sched.amountPaid - paidOnThis);
+        sched.remainingAmount = Math.max(0, sched.installmentAmount - sched.amountPaid);
+
+        if (sched.remainingAmount > 0) {
+          const isOverdue = new Date(sched.dueDate) < new Date();
+          sched.paymentStatus = sched.amountPaid > 0 ? 'partial' : (isOverdue ? 'overdue' : 'pending');
+          sched.paymentId = null;
+          sched.paymentDate = null;
+          sched.receiptId = null;
+        }
+
+        if (payment.lateFeePaid > 0 && sched.lateFeeApplied) {
+          sched.lateFeeApplied = false;
+          sched.lateFeeAmount = 0;
+          sched.lateFeePaid = 0;
+        }
+
+        await sched.save();
+        rollbackRemaining -= paidOnThis;
+      }
+
+      // Revert InstallmentSale balances
+      if (sale) {
+        sale.totalAmountPaid = Math.max(0, (sale.totalAmountPaid || 0) - payAmt);
+        sale.totalRemainingBalance = Math.min(sale.totalSaleAmount, (sale.totalRemainingBalance || 0) + payAmt);
+        sale.remainingBalance = sale.totalRemainingBalance;
+
+        // Recalculate account status
+        const hasOverdue = await InstallmentSchedule.exists({
+          installmentSaleId: sale._id,
+          dueDate: { $lt: new Date() },
+          paymentStatus: { $in: ['pending', 'partial', 'overdue'] }
+        });
+
+        sale.accountStatus = hasOverdue ? 'overdue' : 'active';
+        await sale.save();
+      }
+
+      // Revert customer balances
+      if (customer) {
+        customer.totalPaid = Math.max(0, (customer.totalPaid || 0) - payAmt);
+        customer.outstandingBalance = (customer.outstandingBalance || 0) + payAmt;
+        await customer.save();
+      }
+    } else if (payment.paymentType === 'advance_payment') {
+      // Revert advance payment
+      const sale = await InstallmentSale.findById(payment.referenceId);
+      const customer = await Customer.findById(payment.customerId);
+
+      if (sale) {
+        sale.advancePayment = Math.max(0, (sale.advancePayment || 0) - payAmt);
+        sale.totalAmountPaid = Math.max(0, (sale.totalAmountPaid || 0) - payAmt);
+        sale.totalRemainingBalance = Math.min(sale.totalSaleAmount, (sale.totalRemainingBalance || 0) + payAmt);
+        sale.accountStatus = 'active';
+        await sale.save();
+      }
+
+      if (customer) {
+        customer.totalPaid = Math.max(0, (customer.totalPaid || 0) - payAmt);
+        customer.outstandingBalance = (customer.outstandingBalance || 0) + payAmt;
+        await customer.save();
+      }
+    }
+
+    // Delete associated receipts
+    await Receipt.deleteMany({ paymentId: payment._id });
+
+    // Delete payment
+    await Payment.findByIdAndDelete(payment._id);
+
+    await logActivity(
+      req,
+      'delete',
+      'payment',
+      `Cancelled payment ${payment.paymentNumber} of Rs. ${payAmt}`,
+      payment.referenceId || payment._id
+    );
+
+    return res.json({
+      success: true,
+      message: `Payment ${payment.paymentNumber} of Rs. ${payAmt.toLocaleString()} successfully cancelled and balance restored.`
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   getPayments,
-  getTodayCollections
+  getTodayCollections,
+  cancelPayment
 };

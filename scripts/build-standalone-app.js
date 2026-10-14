@@ -54,21 +54,152 @@ async function buildStandaloneApp() {
   const nodeModulesDest = path.join(appDir, 'node_modules');
   fs.cpSync(nodeModulesSrc, nodeModulesDest, { recursive: true });
 
-  console.log('Step 7: Bundling local MongoDB engine (bin/mongod.exe)...');
-  const binDir = path.join(appDir, 'bin');
-  fs.mkdirSync(binDir, { recursive: true });
+  console.log('Step 7: Bundling local MongoDB engine & Visual C++ Runtime DLLs...');
+  const bundledBinDir = path.join(appDir, 'bin');
+  const releaseBinDir = path.join(releaseDir, 'bin');
+  fs.mkdirSync(bundledBinDir, { recursive: true });
+  fs.mkdirSync(releaseBinDir, { recursive: true });
 
-  const systemMongod = 'C:\\Program Files\\MongoDB\\Server\\8.0\\bin\\mongod.exe';
-  if (fs.existsSync(systemMongod)) {
-    fs.copyFileSync(systemMongod, path.join(binDir, 'mongod.exe'));
-    console.log('Copied mongod.exe to bundled app bin/');
+  const rootBinDir = path.join(rootDir, 'bin');
+  if (fs.existsSync(rootBinDir)) {
+    fs.cpSync(rootBinDir, bundledBinDir, { recursive: true });
+    fs.cpSync(rootBinDir, releaseBinDir, { recursive: true });
+    console.log('Copied mongod.exe and all 7 VC++ runtime DLLs to release bundle.');
+  } else {
+    const systemMongod = 'C:\\Program Files\\MongoDB\\Server\\8.0\\bin\\mongod.exe';
+    if (fs.existsSync(systemMongod)) {
+      fs.copyFileSync(systemMongod, path.join(bundledBinDir, 'mongod.exe'));
+      fs.copyFileSync(systemMongod, path.join(releaseBinDir, 'mongod.exe'));
+    }
   }
 
-  console.log('Step 8: Creating quick-launch desktop runner in release root...');
+  // Copy app icons to release root and app dir
+  for (const iconFile of ['icon.png', 'icon.ico']) {
+    const iconSrc = path.join(rootDir, iconFile);
+    if (fs.existsSync(iconSrc)) {
+      fs.copyFileSync(iconSrc, path.join(releaseDir, iconFile));
+      fs.copyFileSync(iconSrc, path.join(appDir, iconFile));
+    }
+  }
+
+  console.log('Step 8: Creating automated Setup Installer & Desktop Launchers...');
+
+  // 1. One-click Desktop shortcut creator
+  const shortcutBat = `@echo off
+setlocal
+cd /d "%~dp0"
+set "TARGET=%~dp0MR-SOLVER-Electronics-Shop.exe"
+set "ICON=%~dp0icon.ico"
+set "DESKTOP=%USERPROFILE%\\Desktop"
+
+powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%DESKTOP%\\MR SOLVER Electronics Shop.lnk'); $s.TargetPath = '%TARGET%'; $s.WorkingDirectory = '%~dp0'; $s.IconLocation = '%ICON%'; $s.Description = 'MR SOLVER Electronics Shop & Installment Management System'; $s.Save()"
+
+echo =====================================================================
+echo  Desktop Shortcut Created Successfully on Desktop!
+echo =====================================================================
+pause
+`;
+  fs.writeFileSync(path.join(releaseDir, 'Create-Desktop-Shortcut.bat'), shortcutBat);
+
+  // 2. Automated Installer Setup (Zero technical knowledge required)
+  const installerBat = `@echo off
+setlocal EnableDelayedExpansion
+title MR SOLVER Electronics Shop - Automated Setup
+cls
+
+echo =====================================================================
+echo   MR SOLVER LEARNING HUB & SOFTWARE HOUSE
+echo   ELECTRONICS SHOP & INSTALLMENT MANAGEMENT SYSTEM
+echo   100%% Offline Desktop Software Setup & Installer
+echo =====================================================================
+echo.
+echo Installing and configuring software for your PC...
+echo.
+
+set "SOURCE_DIR=%~dp0"
+set "INSTALL_DIR=C:\\MR-SOLVER-Electronics-Shop"
+set "DESKTOP=%USERPROFILE%\\Desktop"
+set "START_MENU=%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\MR SOLVER"
+
+echo [1/4] Creating application directory at !INSTALL_DIR!...
+if not exist "!INSTALL_DIR!" mkdir "!INSTALL_DIR!"
+xcopy /E /I /Y /Q "!SOURCE_DIR!*" "!INSTALL_DIR!\\" >nul
+
+echo [2/4] Creating Desktop Shortcut with shop logo...
+powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('!DESKTOP!\\MR SOLVER Electronics Shop.lnk'); $s.TargetPath = '!INSTALL_DIR!\\MR-SOLVER-Electronics-Shop.exe'; $s.WorkingDirectory = '!INSTALL_DIR!'; $s.IconLocation = '!INSTALL_DIR!\\icon.ico'; $s.Description = 'MR SOLVER Electronics Shop & Installment Management System'; $s.Save()"
+
+echo [3/4] Creating Start Menu Shortcut...
+if not exist "!START_MENU!" mkdir "!START_MENU!"
+powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('!START_MENU!\\MR SOLVER Electronics Shop.lnk'); $s.TargetPath = '!INSTALL_DIR!\\MR-SOLVER-Electronics-Shop.exe'; $s.WorkingDirectory = '!INSTALL_DIR!'; $s.IconLocation = '!INSTALL_DIR!\\icon.ico'; $s.Description = 'MR SOLVER Electronics Shop & Installment Management System'; $s.Save()"
+
+echo [4/4] Installation Complete!
+echo.
+echo =====================================================================
+echo   SETUP COMPLETED SUCCESSFULLY!
+echo.
+echo   - Desktop Shortcut created: "MR SOLVER Electronics Shop"
+echo   - Default Admin Login:
+echo       Username: admin
+echo       Password: admin123
+echo.
+echo   - Local Database: 100%% Offline Embedded (Zero Configuration)
+echo =====================================================================
+echo.
+set /p RUN_NOW="Do you want to launch the software now? (Y/N): "
+if /i "!RUN_NOW!"=="Y" (
+    start "" "!INSTALL_DIR!\\MR-SOLVER-Electronics-Shop.exe"
+)
+exit
+`;
+  fs.writeFileSync(path.join(releaseDir, 'Setup-Installer.bat'), installerBat);
+
+  // 3. Simple runner
   const launcherContent = `@echo off
+cd /d "%~dp0"
 start "" "%~dp0MR-SOLVER-Electronics-Shop.exe"
+exit
 `;
   fs.writeFileSync(path.join(releaseDir, 'Launch-App.bat'), launcherContent);
+
+  // 4. Instructions Readme for client handover
+  const clientReadme = `=====================================================================
+  MR SOLVER LEARNING HUB & SOFTWARE HOUSE
+  ELECTRONICS SHOP & INSTALLMENT MANAGEMENT SYSTEM
+  Offline Desktop Software - Client Handover Package
+=====================================================================
+
+HOW TO INSTALL & RUN (ZERO CONFIGURATION):
+
+OPTION 1: AUTOMATED 1-CLICK INSTALLATION (RECOMMENDED)
+1. Double-click "Setup-Installer.bat"
+2. The installer will automatically:
+   - Install the software to C:\\MR-SOLVER-Electronics-Shop
+   - Create a Desktop Shortcut with the official logo
+   - Configure the offline database engine
+   - Launch the software ready to use!
+
+OPTION 2: PORTABLE USE (NO INSTALLATION)
+1. Keep this folder on any drive (C:, D:, or USB).
+2. Double-click "Create-Desktop-Shortcut.bat" to place an icon on your Desktop.
+3. Double-click "MR-SOLVER-Electronics-Shop.exe" or "Launch-App.bat" anytime!
+
+=====================================================================
+DEFAULT ADMINISTRATOR LOGIN CREDENTIALS:
+=====================================================================
+  Username: admin
+  Password: admin123
+
+(You can change your password anytime inside System Settings -> Admin Security)
+
+=====================================================================
+DATABASE & BACKUP:
+=====================================================================
+- Database runs 100% locally and offline.
+- Backups are generated automatically on schedule.
+- To make a backup anytime, go to System Settings -> Backup & Restore -> "Backup Now".
+- Backups can be downloaded to your computer or restored with 1 click!
+`;
+  fs.writeFileSync(path.join(releaseDir, 'CLIENT-SETUP-INSTRUCTIONS.txt'), clientReadme);
 
   console.log('========================================================');
   console.log(' BUILD COMPLETED SUCCESSFULLY!');

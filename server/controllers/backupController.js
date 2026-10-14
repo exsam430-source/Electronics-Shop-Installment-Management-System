@@ -48,8 +48,57 @@ const restoreFromBackup = async (req, res) => {
   }
 };
 
+const downloadBackupFile = async (req, res) => {
+  try {
+    const { fileName } = req.params;
+    if (!fileName) {
+      return res.status(400).json({ success: false, message: 'File name is required.' });
+    }
+
+    // Sanitize filename
+    const safeName = path.basename(fileName);
+    const dataDir = process.env.DATA_DIR || path.join(__dirname, '../../data');
+    const primaryDir = path.join(dataDir, 'backups');
+    const userDocs = path.join(process.env.USERPROFILE || 'C:', 'Documents', 'MR-SOLVER-Backups');
+
+    let fullPath = path.join(primaryDir, safeName);
+    if (!fs.existsSync(fullPath)) {
+      fullPath = path.join(userDocs, safeName);
+    }
+
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ success: false, message: 'Backup file not found on disk.' });
+    }
+
+    return res.download(fullPath, safeName);
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const uploadAndRestoreBackup = async (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ success: false, message: 'Please upload a valid .eshop_backup file.' });
+    }
+
+    const result = await restoreBackup(req.file.buffer);
+    await logActivity(req, 'update', 'backup', `Database restored from uploaded file ${req.file.originalname}`);
+
+    return res.json({
+      success: true,
+      message: result.message,
+      data: result
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   triggerManualBackup,
   getBackupLogs,
-  restoreFromBackup
+  restoreFromBackup,
+  downloadBackupFile,
+  uploadAndRestoreBackup
 };
